@@ -2,9 +2,10 @@
                                                     boiler6kw.ino 
                                 Copyright © 2018, Zigfred & Nik.S
 31.12.2018 v1
+03.01.2019 v2 откалиброваны коэфициенты трансформаторов тока
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 /*******************************************************************\
-Сервер boiler6kw ArduinoJson выдает данные: 
+Сервер boiler6kw выдает данные: 
   аналоговые: 
     датчики трансформаторы тока  
   цифровые: 
@@ -21,7 +22,7 @@
 #include <RBD_Timer.h>
 
 #define DEVICE_ID "boiler6kw"
-#define VERSION 1
+#define VERSION 2
 
 #define RESET_UPTIME_TIME 43200000  //  = 30 * 24 * 60 * 60 * 1000 
                                     // reset after 30 days uptime 
@@ -84,9 +85,9 @@ void setup() {
   pinMode( A1, INPUT );
   pinMode( A2, INPUT );
   pinMode( A3, INPUT );
-  emon1.current(1, 8.4);
-  emon2.current(2, 8.4);
-  emon3.current(3, 8.4);
+  emon1.current(1, 9.3);
+  emon2.current(2, 9.27);
+  emon3.current(3, 9.29);
 
   pinMode(PIN_FLOW_SENSOR, INPUT);
   attachInterrupt(PIN_INTERRUPT_FLOW_SENSOR, flowSensorPulseCounter, RISING);
@@ -184,18 +185,18 @@ void flowSensorPulseCounter () {
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 String createDataString() {
   String resultData;
-  resultData.concat("deviceId:");
+  resultData.concat("deviceId: ");
   resultData.concat(DEVICE_ID);
-  resultData.concat("\nversion:");
+  resultData.concat("\nversion: ");
   resultData.concat(VERSION);
-  resultData.concat("\nflow-0:" + String(getFlowData()));
-  resultData.concat("\ntrans-1:" + String(emon1.calcIrms(1480)));
-  resultData.concat("\ntrans-2:" + String(emon2.calcIrms(1480)));
-  resultData.concat("\ntrans-3:" + String(emon3.calcIrms(1480)));
+  resultData.concat("\nflow-0: " + String(getFlowData()));
+  resultData.concat("\ntrans-1: " + String(emon1.calcIrms(1480)));
+  resultData.concat("\ntrans-2: " + String(emon2.calcIrms(1480)));
+  resultData.concat("\ntrans-3: " + String(emon3.calcIrms(1480)));
     for (uint8_t index = 0; index < ds18DeviceCount; index++) {
       DeviceAddress deviceAddress;
       ds18Sensors.getAddress(deviceAddress, index);
-      resultData.concat("\nds18-" + dsAddressToString(deviceAddress) + ":" 
+      resultData.concat("\nds18-" + dsAddressToString(deviceAddress) + ": " 
                                   + ds18Sensors.getTempC(deviceAddress));
     }
 
@@ -207,11 +208,11 @@ String createDataString() {
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 int getFlowData() {
   static int flowSensorPulsesPerSecond;
-
+/*
   if (intervalLogServiceTimer.isActive()) { // just return previous value if there is call not for intervalLogService
     return flowSensorPulsesPerSecond;
   }
-
+*/
   flowSensorPulsesPerSecond = (millis() - flowSensorLastTime) / 1000 * flowPulseCount;
   flowSensorLastTime = millis();
   flowPulseCount = 0;
