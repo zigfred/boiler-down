@@ -3,6 +3,7 @@
                                 Copyright © 2018, Zigfred & Nik.S
 31.12.2018 v1
 03.01.2019 v2 откалиброваны коэфициенты трансформаторов тока
+10.01.2019 v3 изменен расчет в YF-B5
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 /*******************************************************************\
 Сервер boiler6kw выдает данные: 
@@ -22,7 +23,8 @@
 #include <RBD_Timer.h>
 
 #define DEVICE_ID "boiler6kw"
-#define VERSION 2
+//String DEVICE_ID "boiler6kw";
+#define VERSION 3
 
 #define RESET_UPTIME_TIME 43200000  //  = 30 * 24 * 60 * 60 * 1000 
                                     // reset after 30 days uptime 
@@ -50,7 +52,8 @@ DallasTemperature ds18Sensors(&ds18wireBus);
 #define PIN_FLOW_SENSOR 2
 #define PIN_INTERRUPT_FLOW_SENSOR 0
 #define FLOW_SENSOR_CALIBRATION_FACTOR 5
-volatile int flowPulseCount;
+byte flowSensorInterrupt = 0; // 0 = digital pin 2
+volatile long flowSensorPulseCount = 0;
 
 // time
 unsigned long currentTime;
@@ -176,8 +179,10 @@ void ds18RequestTemperatures () {
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
             flowSensorPulseCounter
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-void flowSensorPulseCounter () {
-   flowPulseCount++;
+void flowSensorPulseCounter()
+{
+  // Increment the pulse counter
+  flowSensorPulseCount++;
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
@@ -185,67 +190,92 @@ void flowSensorPulseCounter () {
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 String createDataString() {
   String resultData;
-  resultData.concat("deviceId: ");
-  resultData.concat(DEVICE_ID);
-  resultData.concat("\nversion: ");
-  resultData.concat(VERSION);
-  resultData.concat("\nflow-0: " + String(getFlowData()));
-  resultData.concat("\ntrans-1: " + String(emon1.calcIrms(1480)));
-  resultData.concat("\ntrans-2: " + String(emon2.calcIrms(1480)));
-  resultData.concat("\ntrans-3: " + String(emon3.calcIrms(1480)));
-    for (uint8_t index = 0; index < ds18DeviceCount; index++) {
-      DeviceAddress deviceAddress;
-      ds18Sensors.getAddress(deviceAddress, index);
-      resultData.concat("\nds18-" + dsAddressToString(deviceAddress) + ": " 
-                                  + ds18Sensors.getTempC(deviceAddress));
+  resultData.concat("{");
+// resultData.concat("\n\"deviceId\":" + (String(DEVICE_ID)));  
+//  resultData.concat(",");
+  resultData.concat("\n\"version\":");
+  resultData.concat((int)VERSION);
+  resultData.concat(",");
+  resultData.concat("\n\"flow-0\":" + String(getFlowData()));
+  resultData.concat(",");
+  resultData.concat("\n\"trans-1\":" + String(emon1.calcIrms(1480)));
+  resultData.concat(",");
+  resultData.concat("\n\"trans-2\":" + String(emon2.calcIrms(1480)));
+  resultData.concat(",");
+  resultData.concat("\n\"trans-3\":" + String(emon3.calcIrms(1480)));
+  for (uint8_t index = 0; index < ds18DeviceCount; index++)
+  {
+    DeviceAddress deviceAddress;
+    ds18Sensors.getAddress(deviceAddress, index);
+    resultData.concat(",");
+    resultData.concat("\n\"ds18-" + dsAddressToString(deviceAddress) + "\":" + ds18Sensors.getTempC(deviceAddress));
     }
+    
+  resultData.concat("\n}");
 
-  return resultData;
+    return resultData;
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
             getFlowData
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-int getFlowData() {
-  static int flowSensorPulsesPerSecond;
-/*
-  if (intervalLogServiceTimer.isActive()) { // just return previous value if there is call not for intervalLogService
-    return flowSensorPulsesPerSecond;
+int getFlowData()
+{
+  //  static int flowSensorPulsesPerSecond;
+  unsigned long flowSensorPulsesPerSecond;
+
+  unsigned long deltaTime = millis() - flowSensorLastTime;
+  //  if ((millis() - flowSensorLastTime) < 1000) {
+  if (deltaTime < 1000)
+  {
+    return;
   }
-*/
-  flowSensorPulsesPerSecond = (millis() - flowSensorLastTime) / 1000 * flowPulseCount;
+
+  detachInterrupt(flowSensorInterrupt);
+  //     flowSensorPulsesPerSecond = (1000 * flowSensorPulseCount / (millis() - flowSensorLastTime));
+  //    flowSensorPulsesPerSecond = (flowSensorPulseCount * 1000 / deltaTime);
+  flowSensorPulsesPerSecond = flowSensorPulseCount;
+  flowSensorPulsesPerSecond *= 1000;
+  flowSensorPulsesPerSecond /= deltaTime; //  количество за секунду
+
   flowSensorLastTime = millis();
-  flowPulseCount = 0;
+  flowSensorPulseCount = 0;
+  attachInterrupt(flowSensorInterrupt, flowSensorPulseCounter, FALLING);
 
   return flowSensorPulsesPerSecond;
-}
 
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
+}
+  /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
             UTILS
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-void resetWhen30Days () {
-  if (millis() > (RESET_UPTIME_TIME)) {
-    // do reset
+  void resetWhen30Days()
+  {
+    if (millis() > (RESET_UPTIME_TIME))
+    {
+      // do reset
+    }
   }
-}
 
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
+  /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
             doRequest
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-String doRequest(char reqUri, String reqData) {
-  String responseText;
+  String doRequest(char reqUri, String reqData)
+  {
+    String responseText;
 
-  if (httpClient.connect(REST_SERVICE_URL, REST_SERVICE_PORT)) {  //starts client connection, checks for connection
-    Serial.println("connected");
+    if (httpClient.connect(REST_SERVICE_URL, REST_SERVICE_PORT))
+    { //starts client connection, checks for connection
+      Serial.println("connected");
 
-    if (reqData.length()) { // do post request
-      httpClient.println((char) "POST" + reqUri + "HTTP/1.1");
-      //httpClient.println("Host: checkip.dyndns.com"); // TODO remove if not necessary
-      httpClient.println("Content-Type: application/csv;");
-      httpClient.println("Content-Length: " + reqData.length());
-      httpClient.println();
-      httpClient.print(reqData);
-    } else { // do get request
+      if (reqData.length())
+      { // do post request
+        httpClient.println((char)"POST" + reqUri + "HTTP/1.1");
+        //httpClient.println("Host: checkip.dyndns.com"); // TODO remove if not necessary
+        httpClient.println("Content-Type: application/csv;");
+        httpClient.println("Content-Length: " + reqData.length());
+        httpClient.println();
+        httpClient.print(reqData);
+      } else { // do get request
       httpClient.println( (char) "GET" +  reqUri + "HTTP/1.1");
       //httpClient.println("Host: checkip.dyndns.com"); // TODO remove if not necessary
       httpClient.println("Connection: close");  //close 1.1 persistent connection  
@@ -298,3 +328,7 @@ bool readRequest(EthernetClient& client) {
   }
   return false;
 }
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
+            end
+\*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
