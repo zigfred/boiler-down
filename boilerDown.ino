@@ -1,9 +1,10 @@
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
-                                                    boiler6kw.ino 
+                                                    boilerDown.ino 
                                 Copyright © 2018, Zigfred & Nik.S
 31.12.2018 v1
 03.01.2019 v2 откалиброваны коэфициенты трансформаторов тока
 10.01.2019 v3 изменен расчет в YF-B5
+11.01.2019 v4 переименование boiler6kw в boilerDown
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 /*******************************************************************\
 Сервер boiler6kw выдает данные: 
@@ -22,9 +23,9 @@
 #include <EmonLib.h>
 #include <RBD_Timer.h>
 
-#define DEVICE_ID "boiler6kw"
+#define DEVICE_ID "boilerDown"
 //String DEVICE_ID "boiler6kw";
-#define VERSION 3
+#define VERSION 4
 
 #define RESET_UPTIME_TIME 43200000  //  = 30 * 24 * 60 * 60 * 1000 
                                     // reset after 30 days uptime 
