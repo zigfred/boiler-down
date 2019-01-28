@@ -27,7 +27,7 @@
 
 #define DEVICE_ID "boilerDown";
 //String DEVICE_ID "boiler6kw";
-#define VERSION 5
+#define VERSION 6
 
 #define RESET_UPTIME_TIME 43200000  //  = 30 * 24 * 60 * 60 * 1000 
                                     // reset after 30 days uptime 
