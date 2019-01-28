@@ -1,10 +1,12 @@
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
                                                     boilerDown.ino 
-                                Copyright © 2018, Zigfred & Nik.S
+                            Copyright © 2018-2019, Zigfred & Nik.S
 31.12.2018 v1
 03.01.2019 v2 откалиброваны коэфициенты трансформаторов тока
 10.01.2019 v3 изменен расчет в YF-B5
 11.01.2019 v4 переименование boiler6kw в boilerDown
+23.01.2019 v5 добавлены ds18 ТА и в №№ ds18 только последние 2 знака 
+28.01.2019 v6 переименование boilerDown в boiler-down
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 /*******************************************************************\
 Сервер boiler6kw выдает данные: 
@@ -23,16 +25,16 @@
 #include <EmonLib.h>
 #include <RBD_Timer.h>
 
-#define DEVICE_ID "boilerDown"
+#define DEVICE_ID "boilerDown";
 //String DEVICE_ID "boiler6kw";
-#define VERSION 4
+#define VERSION 5
 
 #define RESET_UPTIME_TIME 43200000  //  = 30 * 24 * 60 * 60 * 1000 
                                     // reset after 30 days uptime 
 #define REST_SERVICE_URL "192.168.1.210"
 #define REST_SERVICE_PORT 3010
-char settingsServiceUri[] = "/settings/boiler6kw";
-char intervalLogServiceUri[] = "/intervalLog/boiler6kw";
+char settingsServiceUri[] = "/settings/boilerDown";
+char intervalLogServiceUri[] = "/intervalLog/boilerDown";
 
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xEE, 0xED};
 EthernetServer httpServer(40160);
@@ -53,7 +55,7 @@ DallasTemperature ds18Sensors(&ds18wireBus);
 #define PIN_FLOW_SENSOR 2
 #define PIN_INTERRUPT_FLOW_SENSOR 0
 #define FLOW_SENSOR_CALIBRATION_FACTOR 5
-byte flowSensorInterrupt = 0; // 0 = digital pin 2
+//byte flowSensorInterrupt = 0; // 0 = digital pin 2
 volatile long flowSensorPulseCount = 0;
 
 // time
@@ -72,7 +74,7 @@ void setup() {
   Serial.begin(9600);
   Ethernet.begin(mac);
     while (!Serial) continue;
-
+  delay(1000);
     if (!Ethernet.begin(mac)) {
     Serial.println(F("Failed to initialize Ethernet library"));
     return;
@@ -81,11 +83,11 @@ void setup() {
   Serial.println(F("Server is ready."));
   Serial.print(F("Please connect to http://"));
   Serial.println(Ethernet.localIP());
-  
+  /*
   pinMode(PIN_FLOW_SENSOR, INPUT);
   attachInterrupt(PIN_INTERRUPT_FLOW_SENSOR, flowSensorPulseCounter, RISING);
   sei();
-
+*/
   pinMode( A1, INPUT );
   pinMode( A2, INPUT );
   pinMode( A3, INPUT );
@@ -94,7 +96,7 @@ void setup() {
   emon3.current(3, 9.29);
 
   pinMode(PIN_FLOW_SENSOR, INPUT);
-  attachInterrupt(PIN_INTERRUPT_FLOW_SENSOR, flowSensorPulseCounter, RISING);
+  attachInterrupt(PIN_INTERRUPT_FLOW_SENSOR, flowSensorPulseCounter, FALLING);
   sei();
 
   ds18Sensors.begin();
@@ -192,12 +194,14 @@ void flowSensorPulseCounter()
 String createDataString() {
   String resultData;
   resultData.concat("{");
-// resultData.concat("\n\"deviceId\":" + (String(DEVICE_ID)));  
-//  resultData.concat(",");
+  resultData.concat("\n\"deviceId\":");
+  //  resultData.concat(String(DEVICE_ID));
+  resultData.concat("\"boilerDown\"");
+  resultData.concat(",");
   resultData.concat("\n\"version\":");
   resultData.concat((int)VERSION);
   resultData.concat(",");
-  resultData.concat("\n\"flow-0\":" + String(getFlowData()));
+  resultData.concat("\n\"flow\":" + String(getFlowData()));
   resultData.concat(",");
   resultData.concat("\n\"trans-1\":" + String(emon1.calcIrms(1480)));
   resultData.concat(",");
@@ -208,8 +212,12 @@ String createDataString() {
   {
     DeviceAddress deviceAddress;
     ds18Sensors.getAddress(deviceAddress, index);
+    String stringAddr = dsAddressToString(deviceAddress);
     resultData.concat(",");
-    resultData.concat("\n\"ds18-" + dsAddressToString(deviceAddress) + "\":" + ds18Sensors.getTempC(deviceAddress));
+    resultData.concat("\n\"ds");
+    resultData.concat(index);
+    resultData.concat(" ");
+    resultData.concat(stringAddr.substring(14) + "\":" + ds18Sensors.getTempC(deviceAddress));
     }
     
   resultData.concat("\n}");
@@ -232,7 +240,8 @@ int getFlowData()
     return;
   }
 
-  detachInterrupt(flowSensorInterrupt);
+  //detachInterrupt(flowSensorInterrupt);
+  detachInterrupt(PIN_INTERRUPT_FLOW_SENSOR);
   //     flowSensorPulsesPerSecond = (1000 * flowSensorPulseCount / (millis() - flowSensorLastTime));
   //    flowSensorPulsesPerSecond = (flowSensorPulseCount * 1000 / deltaTime);
   flowSensorPulsesPerSecond = flowSensorPulseCount;
@@ -241,7 +250,8 @@ int getFlowData()
 
   flowSensorLastTime = millis();
   flowSensorPulseCount = 0;
-  attachInterrupt(flowSensorInterrupt, flowSensorPulseCounter, FALLING);
+  //attachInterrupt(flowSensorInterrupt, flowSensorPulseCounter, FALLING);
+  attachInterrupt(PIN_INTERRUPT_FLOW_SENSOR, flowSensorPulseCounter, FALLING);
 
   return flowSensorPulsesPerSecond;
 
